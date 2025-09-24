@@ -64,11 +64,50 @@ async def search_mojeek(session: aiohttp.ClientSession, keyword: str) -> List[st
     return urls[: config.MAX_SEED_RESULTS_PER_ENGINE]
 
 
+async def search_baidu(session: aiohttp.ClientSession, keyword: str) -> List[str]:
+    urls: List[str] = []
+    for page in range(0, 3):  # pn=0,10,20
+        q = aiohttp.helpers.quote(keyword)
+        url = f"https://www.baidu.com/s?wd={q}&pn={page*10}"
+        html = await fetch_text(session, url)
+        if not html:
+            continue
+        soup = BeautifulSoup(html, "html.parser")
+        for h3 in soup.select('h3 a[href]'):
+            href = h3.get('href')
+            if href and href.startswith('http'):
+                urls.append(href)
+        if len(urls) >= config.MAX_SEED_RESULTS_PER_ENGINE:
+            break
+    return urls[: config.MAX_SEED_RESULTS_PER_ENGINE]
+
+
+async def search_sogou(session: aiohttp.ClientSession, keyword: str) -> List[str]:
+    urls: List[str] = []
+    for page in range(1, 4):
+        q = aiohttp.helpers.quote(keyword)
+        url = f"https://www.sogou.com/web?query={q}&page={page}"
+        html = await fetch_text(session, url)
+        if not html:
+            continue
+        soup = BeautifulSoup(html, "html.parser")
+        for a in soup.select('a[href]'):
+            href = a.get('href')
+            if href and href.startswith('http') and 'sogou.com' not in href:
+                urls.append(href)
+        if len(urls) >= config.MAX_SEED_RESULTS_PER_ENGINE:
+            break
+    return urls[: config.MAX_SEED_RESULTS_PER_ENGINE]
+
+
 async def gather_seeds(keyword: str) -> List[str]:
     async with aiohttp.ClientSession() as session:
         res = await asyncio.gather(
             search_duckduckgo(session, keyword),
             search_mojeek(session, keyword),
+            # 额外增加国内常用搜索源：百度与搜狗（HTML 结果页）
+            search_baidu(session, keyword),
+            search_sogou(session, keyword),
             return_exceptions=True,
         )
     seeds: List[str] = []
