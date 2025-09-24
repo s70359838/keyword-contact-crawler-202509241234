@@ -31,7 +31,7 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          pyinstaller --onefile -n crawler.exe -p app app\\server.py
+          pyinstaller --onefile --noconsole -n crawler.exe -p app app\\server.py
 
       - name: Add extras (start.bat, README)
         shell: pwsh

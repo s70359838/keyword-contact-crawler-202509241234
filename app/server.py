@@ -3,6 +3,12 @@ from aiohttp import web
 import webbrowser
 import socket
 import os
+import logging
+import platform
+try:
+    import ctypes
+except Exception:
+    ctypes = None
 
 from . import config
 from .manager import CrawlManager, create_app
@@ -27,35 +33,67 @@ async def _on_cleanup(app: web.Application):
     await mgr.close()
 
 
-def run_server():
-    mgr = CrawlManager()
-    app = asyncio.get_event_loop().run_until_complete(create_app(mgr))
-    app['mgr'] = mgr
-    app.on_startup.append(_on_startup)
-    app.on_cleanup.append(_on_cleanup)
-    # 打开默认浏览器
-    try:
-        webbrowser.open(f"http://{config.CONTROL_HOST}:{config.CONTROL_PORT}/")
-    except Exception:
-        pass
-    host = config.CONTROL_HOST
-    port = config.CONTROL_PORT
-    # 端口占用自动回退
-    for p in [port, port + 1, port + 2, port + 10]:
+def _message_box(title: str, text: str):
+    if platform.system().lower().startswith('win') and ctypes:
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind((host, p))
-            port = p
-            break
-        except Exception:
-            continue
-    if not os.environ.get('CRAWLER_NO_BROWSER'):
-        try:
-            webbrowser.open(f"http://{host}:{port}/")
+            ctypes.windll.user32.MessageBoxW(0, text, title, 0x10)
+            return
         except Exception:
             pass
-    web.run_app(app, host=host, port=port)
+    print(f"{title}: {text}")
+
+
+def run_server():
+    # 提前配置日志，避免异常丢失
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        logging.basicConfig(filename=os.path.join(config.DATA_DIR, 'server_boot.log'), level=logging.INFO)
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+
+    async def main():
+        mgr = CrawlManager()
+        app = await create_app(mgr)
+        app['mgr'] = mgr
+        app.on_startup.append(_on_startup)
+        app.on_cleanup.append(_on_cleanup)
+
+        host = config.CONTROL_HOST
+        desired_port = int(os.environ.get('CRAWLER_PORT', str(config.CONTROL_PORT)))
+        # 若指定端口不可用，使用0让系统分配
+        try_specific = True
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind((host, desired_port))
+        except Exception:
+            try_specific = False
+
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, host, desired_port if try_specific else 0)
+        await site.start()
+        actual_port = desired_port
+        try:
+            # 读取实际绑定端口
+            for s in site._server.sockets:
+                actual_port = s.getsockname()[1]
+                break
+        except Exception:
+            pass
+
+        url = f"http://{host}:{actual_port}/" if host != '0.0.0.0' else f"http://127.0.0.1:{actual_port}/"
+        if not os.environ.get('CRAWLER_NO_BROWSER'):
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        await asyncio.Event().wait()
+
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logging.exception("Fatal error during server startup")
+        _message_box("Crawler 启动失败", f"错误: {e}\n日志: {os.path.join(config.DATA_DIR, 'server_boot.log')}")
 
 
 if __name__ == '__main__':
