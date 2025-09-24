@@ -20,6 +20,14 @@ async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
         return await resp.text(errors="ignore")
 
 
+async def resolve_redirects(session: aiohttp.ClientSession, url: str) -> str:
+    try:
+        async with session.get(url, allow_redirects=True, timeout=10, headers={"User-Agent": pick_user_agent(), **HEADERS_BASE}) as resp:
+            return str(resp.url)
+    except Exception:
+        return url
+
+
 def extract_links_from_html(html: str) -> List[str]:
     soup = BeautifulSoup(html, "html.parser")
     links = []
@@ -73,10 +81,17 @@ async def search_baidu(session: aiohttp.ClientSession, keyword: str) -> List[str
         if not html:
             continue
         soup = BeautifulSoup(html, "html.parser")
+        raw = []
         for h3 in soup.select('h3 a[href]'):
             href = h3.get('href')
             if href and href.startswith('http'):
-                urls.append(href)
+                raw.append(href)
+        # 解析跳转，拿到真实目标链接，避免命中 baidu.com/link 的 robots 限制
+        if raw:
+            resolved = await asyncio.gather(*[resolve_redirects(session, u) for u in raw], return_exceptions=True)
+            for r in resolved:
+                if isinstance(r, str) and r.startswith('http') and 'baidu.com' not in r:
+                    urls.append(r)
         if len(urls) >= config.MAX_SEED_RESULTS_PER_ENGINE:
             break
     return urls[: config.MAX_SEED_RESULTS_PER_ENGINE]
@@ -91,10 +106,16 @@ async def search_sogou(session: aiohttp.ClientSession, keyword: str) -> List[str
         if not html:
             continue
         soup = BeautifulSoup(html, "html.parser")
+        raw = []
         for a in soup.select('a[href]'):
             href = a.get('href')
-            if href and href.startswith('http') and 'sogou.com' not in href:
-                urls.append(href)
+            if href and href.startswith('http'):
+                raw.append(href)
+        if raw:
+            resolved = await asyncio.gather(*[resolve_redirects(session, u) for u in raw], return_exceptions=True)
+            for r in resolved:
+                if isinstance(r, str) and r.startswith('http') and 'sogou.com' not in r:
+                    urls.append(r)
         if len(urls) >= config.MAX_SEED_RESULTS_PER_ENGINE:
             break
     return urls[: config.MAX_SEED_RESULTS_PER_ENGINE]
