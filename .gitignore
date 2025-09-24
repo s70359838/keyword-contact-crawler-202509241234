@@ -1,0 +1,21 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+
+# Venv
+.venv/
+
+# Local data
+data/
+export/
+*.sqlite
+*.log
+server.log
+
+# Build
+dist/
+build/
+*.spec
+
+# OS
+.DS_Store

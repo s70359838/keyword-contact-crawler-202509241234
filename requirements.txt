@@ -1,0 +1,5 @@
+aiohttp==3.9.5
+beautifulsoup4==4.12.3
+langdetect==1.0.9
+phonenumberslite==8.13.45
+tldextract==5.1.2
