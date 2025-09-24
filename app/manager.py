@@ -4,6 +4,8 @@ from typing import Deque, Optional
 
 from aiohttp import web
 import logging
+import os
+from . import config
 
 from .crawler import Crawler
 from .searchers import gather_seeds
@@ -87,7 +89,11 @@ class CrawlManager:
 async def create_app(mgr: CrawlManager) -> web.Application:
     app = web.Application()
     # 简单文件日志，便于 Windows 双击 exe 排障
-    logging.basicConfig(filename=str((web.__file__)).replace('web_app.py','crawler.log'), level=logging.INFO)
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        logging.basicConfig(filename=os.path.join(config.DATA_DIR, 'crawler.log'), level=logging.INFO)
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
 
     async def handle_root(request):
         raise web.HTTPFound('/ui')

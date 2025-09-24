@@ -2,6 +2,7 @@ import asyncio
 from aiohttp import web
 import webbrowser
 import socket
+import os
 
 from . import config
 from .manager import CrawlManager, create_app
@@ -49,10 +50,11 @@ def run_server():
             break
         except Exception:
             continue
-    try:
-        webbrowser.open(f"http://{host}:{port}/")
-    except Exception:
-        pass
+    if not os.environ.get('CRAWLER_NO_BROWSER'):
+        try:
+            webbrowser.open(f"http://{host}:{port}/")
+        except Exception:
+            pass
     web.run_app(app, host=host, port=port)
 
 
