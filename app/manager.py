@@ -22,6 +22,7 @@ class CrawlManager:
         self.writer = ResultWriter()
         self.crawler = Crawler()
         self._lock: Optional[asyncio.Lock] = None
+        self._last_round_done_ts: float = 0.0
 
     def init_async(self):
         # 在事件循环已建立后创建 asyncio 原语，避免跨循环错误
@@ -71,7 +72,11 @@ class CrawlManager:
                     if self.keywords:
                         self.active_keyword = self.keywords.popleft()
                     else:
-                        await asyncio.sleep(0.3)
+                        # 自动循环：未暂停、开启自动循环时，每隔固定时间再复用上一次关键词
+                        if config.AUTO_LOOP and (asyncio.get_event_loop().time() - self._last_round_done_ts) >= config.AUTO_LOOP_INTERVAL_SEC and self.keywords:
+                            # 有排队关键词时会被上面的逻辑拾取
+                            pass
+                        await asyncio.sleep(0.5)
                         continue
                 kw = self.active_keyword
             # 拉取种子并抓取
@@ -84,6 +89,10 @@ class CrawlManager:
             # 一轮结束，清空 active
             async with self._lock:
                 self.active_keyword = None
+                self._last_round_done_ts = asyncio.get_event_loop().time()
+                # 自动循环：把刚才的关键词重新放回队列尾部，实现持续采集
+                if config.AUTO_LOOP and kw:
+                    self.keywords.append(kw)
 
 
 async def create_app(mgr: CrawlManager) -> web.Application:

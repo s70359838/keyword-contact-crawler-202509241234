@@ -54,3 +54,10 @@ try:
     CONTROL_PORT = int(os.environ.get("CRAWLER_PORT", "8848"))
 except Exception:
     CONTROL_PORT = 8848
+
+# 自动循环采集（未暂停时连续采集），间隔可用环境变量覆盖
+AUTO_LOOP = os.environ.get("CRAWLER_AUTO_LOOP", "1") not in ("0", "false", "False")
+try:
+    AUTO_LOOP_INTERVAL_SEC = int(os.environ.get("CRAWLER_LOOP_INTERVAL", "60"))
+except Exception:
+    AUTO_LOOP_INTERVAL_SEC = 60
