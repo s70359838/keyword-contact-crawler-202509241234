@@ -33,11 +33,25 @@ jobs:
         run: |
           pyinstaller --onefile -n crawler.exe -p app app\\server.py
 
+      - name: Add extras (start.bat, README)
+        shell: pwsh
+        run: |
+          Copy-Item start.bat dist\start.bat
+          Copy-Item README-run.txt dist\README-run.txt
+
+      - name: Build Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup -y
+          & "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" installer.iss
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: crawler-windows
-          path: dist/crawler.exe
+          path: |
+            dist/crawler.exe
+            dist/KeywordContactCrawlerSetup.exe
 
       - name: Create Release and Upload EXE
         uses: softprops/action-gh-release@v2
@@ -48,4 +62,5 @@ jobs:
           prerelease: false
           files: |
             dist/crawler.exe
+            dist/KeywordContactCrawlerSetup.exe
 
